@@ -81,7 +81,7 @@ jobs:
           submodules: true
 
       - name: Apply core CMake patch
-        run: git -C core apply patches/0001-add-python-bindings-hook.patch
+        run: git -C core apply ../patches/0001-add-python-bindings-hook.patch
 
       - name: Install macOS build dependencies
         if: startsWith(matrix.os, 'macos')
