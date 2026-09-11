@@ -7,7 +7,7 @@ import sys
 import tempfile
 from typing import Optional
 
-from ._openmalaria import MEASURE_CODES, _version
+from . import _openmalaria
 from .errors import OpenMalariaError
 from .types import OMRunResult, ScenarioResult
 
@@ -19,6 +19,8 @@ __all__ = [
     "run",
     "version",
 ]
+
+MEASURE_CODES: dict[str, int] = _openmalaria.MEASURE_CODES
 
 
 def run(
@@ -75,5 +77,5 @@ def run(
 
 
 def version() -> dict:
-    v = _version()
+    v = _openmalaria._version()
     return {"program_version": v.program_version, "schema_version": v.schema_version}
