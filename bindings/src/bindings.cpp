@@ -30,6 +30,7 @@
 #include <nanobind/stl/vector.h>
 
 #include "Simulator.h"
+#include "mon/OutMeasures.h"
 #include "schema/scenario.h"
 #include "util/CommandLine.h"
 #include "util/DocumentLoader.h"
@@ -166,6 +167,13 @@ VersionInfo version_impl() {
   return VersionInfo{OM::util::semantic_version, OM::util::SCHEMA_VERSION};
 }
 
+nb::dict measure_codes_impl() {
+  nb::dict codes;
+  for (const auto &def : OM::mon::defs)
+    codes[def.name] = def.outId;
+  return codes;
+}
+
 void register_core_bindings(nb::module_ &m) {
   nb::class_<SurveyData>(m, "SurveyData")
       .def_ro("survey", &SurveyData::survey, nb::rv_policy::copy)
@@ -190,6 +198,8 @@ void register_core_bindings(nb::module_ &m) {
         "progress"_a = false, "seed"_a = nb::none());
 
   m.def("_version", &version_impl);
+
+  m.attr("MEASURE_CODES") = measure_codes_impl();
 }
 
 void register_error_bindings(nb::module_ &m) {

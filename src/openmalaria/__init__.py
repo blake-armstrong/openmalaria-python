@@ -7,11 +7,18 @@ import sys
 import tempfile
 from typing import Optional
 
-from ._openmalaria import _version
+from ._openmalaria import MEASURE_CODES, _version
 from .errors import OpenMalariaError
 from .types import OMRunResult, ScenarioResult
 
-__all__ = ["OMRunResult", "OpenMalariaError", "ScenarioResult", "run", "version"]
+__all__ = [
+    "MEASURE_CODES",
+    "OMRunResult",
+    "OpenMalariaError",
+    "ScenarioResult",
+    "run",
+    "version",
+]
 
 
 def run(
