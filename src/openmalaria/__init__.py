@@ -32,6 +32,8 @@ def run(
     verbose: bool = False,
     progress: bool = False,
     seed: Optional[int] = None,
+    tmp_dir: Optional[str] = None,
+    keep_tmp: bool = False,
 ) -> OMRunResult:
     if (xml is None) == (path is None):
         raise ValueError("exactly one of xml= or path= must be given")
@@ -46,9 +48,15 @@ def run(
         "seed": seed,
     }
 
-    with tempfile.TemporaryDirectory(prefix="openmalaria-run-") as tmp:
-        in_path = os.path.join(tmp, "in.pkl")
-        out_path = os.path.join(tmp, "out.pkl")
+    if keep_tmp:
+        tmp = tempfile.mkdtemp(prefix="openmalaria-run-", dir=tmp_dir)
+    else:
+        tmp = tempfile.TemporaryDirectory(prefix="openmalaria-run-", dir=tmp_dir)
+
+    try:
+        tmp_path = tmp if keep_tmp else tmp.name
+        in_path = os.path.join(tmp_path, "in.pkl")
+        out_path = os.path.join(tmp_path, "out.pkl")
         with open(in_path, "wb") as f:
             pickle.dump(job, f)
 
@@ -63,13 +71,22 @@ def run(
         )
 
         if not os.path.exists(out_path):
-            raise OpenMalariaError(
+            msg = (
                 f"openmalaria worker subprocess exited with code {proc.returncode} "
-                "before producing a result (likely crashed -- see output above)"
+                "before producing a result"
             )
+            if keep_tmp:
+                msg += f"; input/output pickles kept at {tmp_path}"
+            raise OpenMalariaError(msg)
 
         with open(out_path, "rb") as f:
             outcome = pickle.load(f)
+    finally:
+        if not keep_tmp:
+            tmp.cleanup()
+
+    if keep_tmp:
+        print(f"openmalaria: kept tmp files at {tmp_path}", file=sys.stderr)
 
     if not outcome["ok"]:
         raise OpenMalariaError(outcome["error"])

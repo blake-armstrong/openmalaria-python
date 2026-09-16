@@ -62,6 +62,12 @@ equivalent to the CLI's `--validate-only`), `seed=<int>` (override the
 scenario's `@iseed`), and `verbose=True`/`progress=True` (equivalent to the CLI
 flags of the same name).
 
+Each `run()` exchanges its input/output with the worker subprocess via pickle
+files in a temporary directory, which is deleted afterwards by default.
+`tmp_dir=<path>` controls where that directory is created (defaults to the
+system temp dir), and `keep_tmp=True` skips deletion and prints the kept
+directory's path to stderr, for inspecting `in.pkl`/`out.pkl` after a run.
+
 ### `survey` DataFrame schema
 
 Mirrors `output.txt`'s own row schema exactly: `survey` (1-based survey number),

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -102,3 +104,53 @@ def test_repeated_calls_in_same_process_succeed(
     r1 = om.run(path=str(scenario1_path), resource_path=resource_path)
     r2 = om.run(path=str(scenario1_path), resource_path=resource_path)
     assert (r1["survey"]["value"].to_numpy() == r2["survey"]["value"].to_numpy()).all()
+
+
+def test_tmp_dir_is_used_and_cleaned_up_by_default(
+    scenario1_path, resource_path, tmp_path, monkeypatch
+):
+    custom_tmp = tmp_path / "custom_tmp"
+    custom_tmp.mkdir()
+    monkeypatch.chdir(scenario1_path.parent)
+
+    om.run(path=str(scenario1_path), resource_path=resource_path, tmp_dir=str(custom_tmp))
+
+    assert list(custom_tmp.iterdir()) == []
+
+
+def test_keep_tmp_preserves_pickle_files_under_tmp_dir(
+    scenario1_path, resource_path, tmp_path, monkeypatch
+):
+    custom_tmp = tmp_path / "custom_tmp"
+    custom_tmp.mkdir()
+    monkeypatch.chdir(scenario1_path.parent)
+
+    om.run(
+        path=str(scenario1_path),
+        resource_path=resource_path,
+        tmp_dir=str(custom_tmp),
+        keep_tmp=True,
+    )
+
+    entries = list(custom_tmp.iterdir())
+    assert len(entries) == 1
+    run_dir = entries[0]
+    assert run_dir.name.startswith("openmalaria-run-")
+    assert (run_dir / "in.pkl").exists()
+    assert (run_dir / "out.pkl").exists()
+
+
+def test_keep_tmp_prints_kept_path_on_stderr(
+    scenario1_path, resource_path, monkeypatch, capsys
+):
+    monkeypatch.chdir(scenario1_path.parent)
+
+    om.run(path=str(scenario1_path), resource_path=resource_path, keep_tmp=True)
+
+    captured = capsys.readouterr()
+    assert "openmalaria: kept tmp files at " in captured.err
+    kept_path = captured.err.strip().rsplit(" at ", 1)[1]
+    assert os.path.isdir(kept_path)
+    assert os.path.exists(os.path.join(kept_path, "in.pkl"))
+    assert os.path.exists(os.path.join(kept_path, "out.pkl"))
+    shutil.rmtree(kept_path)
