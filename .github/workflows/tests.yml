@@ -1,0 +1,47 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Apply core CMake patch
+        run: git -C core apply ../patches/0001-add-python-bindings-hook.patch
+
+      - name: Install macOS build dependencies
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install coreutils gsl xerces-c xsd || true
+          HOMEBREW_NO_AUTO_UPDATE=1 brew link --overwrite xsd
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: |
+          uv venv
+          uv pip install -e ".[test]"
+
+      - name: Run tests
+        run: uv run pytest -v
