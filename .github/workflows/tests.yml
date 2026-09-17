@@ -39,9 +39,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install package
-        run: |
-          uv venv
-          uv pip install -e ".[test]"
+        run: uv pip install -e ".[test]"
 
       - name: Run tests
         run: uv run pytest -v
