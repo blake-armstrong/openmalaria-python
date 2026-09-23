@@ -2,8 +2,14 @@
 
 Python bindings for [OpenMalaria](https://github.com/SwissTPH/openmalaria),
 built with [nanobind](https://github.com/wjakob/nanobind). Runs a scenario in a
-fresh subprocess per call (see "Why a subprocess per run()" below) and returns
-pandas DataFrames directly
+fresh subprocess per call and returns pandas DataFrames directly. **Bypasses the
+need to read an XML from the disk, and writing results to the disk.**
+
+NOTE: This is **NOT** a *workflow*. This repo provides a small and concise way
+to connect the OpenMalaria C++ code to Python as a library call. This repo does
+not add additional functionality to OpenMalaria. It is just an environment that
+provides a consistent way to run OpenMalaria through Python, handle exceptions,
+and provide small typings for returned information.
 
 ## Install
 
