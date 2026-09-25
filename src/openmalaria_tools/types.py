@@ -1,15 +1,8 @@
 from __future__ import annotations
 
-from typing import TypedDict
+from openmalaria.types import OMRunResult
 
-import pandas as pd
-
-
-class OMRunResult(TypedDict):
-    """The dict openmalaria.run() itself returns."""
-
-    survey: pd.DataFrame
-    continuous: pd.DataFrame | None
+__all__ = ["OMRunResult", "ScenarioResult"]
 
 
 class ScenarioResult(OMRunResult):

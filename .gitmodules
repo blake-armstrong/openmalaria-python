@@ -1,4 +1,0 @@
-[submodule "core"]
-	path = core
-	url = git@github.com:blake-armstrong/openmalaria.git
-	branch = core-only

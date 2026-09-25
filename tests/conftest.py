@@ -1,57 +1,29 @@
 from __future__ import annotations
 
-import shutil
-from pathlib import Path
-
+import pandas as pd
 import pytest
+from openmalaria import MEASURE_CODES
 
-SCHEMA_VERSION = 50
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-CORE_DIR = REPO_ROOT / "core"
-CORE_TEST_DIR = CORE_DIR / "test"
-RESOURCE_DIR = CORE_TEST_DIR
-EXPECTED_DIR = CORE_TEST_DIR / "expected"
-SCHEMA_FILE = CORE_DIR / "schema" / f"scenario_{SCHEMA_VERSION}.xsd"
+N_AGE_GROUPS = 3
+N_SURVEYS = 2
 
 
-@pytest.fixture(scope="session")
-def resource_path() -> str:
-    return str(RESOURCE_DIR)
-
-
-@pytest.fixture
-def scenario1_path(tmp_path: Path) -> Path:
-    shutil.copy(SCHEMA_FILE, tmp_path / "scenario_current.xsd")
-    dest = tmp_path / "scenario1.xml"
-    shutil.copy(CORE_TEST_DIR / "scenario1.xml", dest)
-    return dest
-
-
-@pytest.fixture(scope="session")
-def scenario1_result(tmp_path_factory, resource_path):
-    import os
-
-    import openmalaria as om
-
-    sim_dir = tmp_path_factory.mktemp("sim")
-    shutil.copy(SCHEMA_FILE, sim_dir / "scenario_current.xsd")
-    scenario_path = sim_dir / "scenario1.xml"
-    shutil.copy(CORE_TEST_DIR / "scenario1.xml", scenario_path)
-
-    old_cwd = os.getcwd()
-    os.chdir(sim_dir)
-    try:
-        return om.run(path=str(scenario_path), resource_path=resource_path)
-    finally:
-        os.chdir(old_cwd)
+def make_survey(values: dict[str, list[list[float]]]) -> pd.DataFrame:
+    rows = [
+        (survey + 1, age_group + 1, MEASURE_CODES[name], by_group[age_group][survey])
+        for name, by_group in values.items()
+        for survey in range(len(by_group[0]))
+        for age_group in range(len(by_group))
+    ]
+    return pd.DataFrame(rows, columns=["survey", "column", "measure", "value"])
 
 
 @pytest.fixture
-def expected_output1() -> Path:
-    return EXPECTED_DIR / "output1.txt"
-
-
-@pytest.fixture
-def expected_ctsout1() -> Path:
-    return EXPECTED_DIR / "ctsout1.txt"
+def survey() -> pd.DataFrame:
+    return make_survey(
+        {
+            "nHost": [[100.0, 200.0], [50.0, 0.0], [10.0, 20.0]],
+            "nPatent": [[10.0, 40.0], [25.0, 0.0], [1.0, 5.0]],
+            "nUncomp": [[5.0, 8.0], [2.0, 0.0], [0.0, 1.0]],
+        }
+    )

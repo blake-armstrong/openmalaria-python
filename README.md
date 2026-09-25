@@ -1,133 +1,87 @@
-# openmalaria (Python bindings)
+# openmalaria-tools
 
-Python bindings for [OpenMalaria](https://github.com/SwissTPH/openmalaria),
-built with [nanobind](https://github.com/wjakob/nanobind). Runs a scenario in a
-fresh subprocess per call and returns pandas DataFrames directly. **Bypasses the
-need to read an XML from the disk, and writing results to the disk.**
+Helpers for analysing [OpenMalaria](https://github.com/SwissTPH/openmalaria)
+output from Python.
 
-NOTE: This is **NOT** a *workflow*. This repo provides a small and concise way
-to connect the OpenMalaria C++ code to Python as a library call. This repo does
-not add additional functionality to OpenMalaria. It is just an environment that
-provides a consistent way to run OpenMalaria through Python, handle exceptions,
-and provide small typings for returned information.
+Running scenarios is done by the `openmalaria` package itself
+([openmalaria-nanobind](https://github.com/blake-armstrong/openmalaria-nanobind),
+the minimal compiled bindings): `import openmalaria as om; om.run(...)`.
+Building, the one-subprocess-per-`run()` isolation, and the
+`survey`/`continuous` DataFrame schemas are all documented there.
+
+This package adds small, thin helpers over what `om.run()` returns, with no
+calibration or workflow logic: `openmalaria_tools.survey`,
+`openmalaria_tools.scenario` and `openmalaria_tools.metrics`.
 
 ## Install
 
-This repo depends on the
-[openmalaria](https://github.com/blake-armstrong/openmalaria) C++ core as a git
-submodule (`core/`), which is not python-aware. The `OM_BUILD_PYTHON` CMake flag
-is built from a local patch here (see `patches/`)
-
 ```sh
-git submodule update --init
-git -C core apply ../patches/0001-add-python-bindings-hook.patch
-pip install .
+pip install openmalaria-tools
 ```
 
-(editable, for development: `pip install -e .`)
-
-With [uv](https://docs.astral.sh/uv/):
+This pulls in `openmalaria` (prebuilt wheels). For development against a local
+checkout of both repos side by side:
 
 ```sh
-git submodule update --init
-git -C core apply ../patches/0001-add-python-bindings-hook.patch
-uv venv
-uv pip install .
+uv sync
 ```
 
-(editable: `uv pip install -e .`)
-
-If `core/CMakeLists.txt` changes upstream in a way that conflicts with the
-patch, re-run `git -C core apply` after resolving and update the patch file
-(`git -C core diff > patches/0001-add-python-bindings-hook.patch`).
+`[tool.uv.sources]` in `pyproject.toml` points `openmalaria` at
+`../openmalaria-nanobind` (editable). Use `uv sync --no-sources` to take it from
+PyPI instead.
 
 ## Usage
 
 ```python
 import openmalaria as om
+from openmalaria_tools import metrics, scenario, survey
 
-result = om.run(path="scenario.xml")
-result["survey"]       # pd.DataFrame: survey, column, measure, value
-result["continuous"]   # pd.DataFrame (one row per timestep) or None
+result = om.run(xml=scenario_xml, resource_path="resources", schema_dir="schema")
+df = result["survey"]
+
+survey.by_age_group(df, "nHost")  # (age group x survey) array
+metrics.prevalence(df)  # nPatent / nHost, (age group x survey)
+metrics.rate_by_age_group(df, "nUncomp")  # measure / nHost
+metrics.total_rate(df, "expectedSevere")  # per survey, all ages pooled
+
+upperbounds = scenario.age_group_upperbounds(scenario_xml)
+metrics.pfpr(df, upperbounds, lo=2, hi=10)  # PfPR_2-10 at the last survey
 ```
 
-Or pass scenario XML content directly instead of a file path:
+### `openmalaria_tools.survey`
 
-```python
-result = om.run(xml=scenario_xml_string, resource_path="/path/to/resources")
-```
+- `by_age_group(survey, measure)`: values of one measure as an
+  (age group x survey) array. `measure` is a `MEASURE_CODES` name or its integer
+  code.
+- `age_groups(survey)` / `n_age_groups(survey)`: the monitoring age-group
+  columns present.
+- `read_output_txt(path)`: read an OpenMalaria CLI `output.txt` into the same
+  DataFrame schema as `run()["survey"]`, for comparing CLI and Python runs.
 
-NB: schema lookup resolves relative to the current working directory for both
-`path=` and `xml=` (not relative to the scenario file's own directory, if using
-`path=`). Run from a directory containing `scenario_current.xsd`, or otherwise
-ensure the schema is discoverable from the working directory.
+### `openmalaria_tools.scenario`
 
-`om.run()` also accepts `validate_only=True` (parse/validate the scenario and
-stop before any timestep evolution. This acts as a cheap sanity check,
-equivalent to the CLI's `--validate-only`), `seed=<int>` (override the
-scenario's `@iseed`), and `verbose=True`/`progress=True` (equivalent to the CLI
-flags of the same name).
+- `age_group_bounds(xml)`: monitoring age-group edges
+  `[lowerbound, upperbound_1, ..., upperbound_n]`.
+- `age_group_upperbounds(xml)`, `age_group_midpoints(xml)`.
+- `age_group_labels(upperbounds, lowerbound=0.0)`: `"0-0.5"`, `"0.5-1"`, ...
 
-Each `run()` exchanges its input/output with the worker subprocess via pickle
-files in a temporary directory, which is deleted afterwards by default.
-`tmp_dir=<path>` controls where that directory is created (defaults to the
-system temp dir), and `keep_tmp=True` skips deletion and prints the kept
-directory's path to stderr, for inspecting `in.pkl`/`out.pkl` after a run.
+### `openmalaria_tools.metrics`
 
-### `survey` DataFrame schema
+- `prevalence(survey)`, `rate_by_age_group(survey, measure)`: per age group and
+  survey, divided by `nHost`. Division by zero gives `nan`/`inf`, not an error.
+- `total_rate(survey, measure)`: per survey, summed over age groups.
+- `pfpr(survey, upperbounds, lo=2, hi=10, survey_index=-1)`: parasite
+  prevalence over the monitoring age groups lying entirely within `[lo, hi]`.
 
-Mirrors `output.txt`'s own row schema exactly: `survey` (1-based survey number),
-`column` (encodes age-group/cohort/species/genotype/drug the same way
-`output.txt` does), `measure` (the OutMeasure id), `value`.
-
-### `continuous` DataFrame schema
-
-One row per reported timestep, one column per enabled `monitoring/continuous`
-metric (column names taken from the scenario's own metric titles). `None` if the
-scenario has no `<continuous>` monitoring configured.
-
-## Version info
-
-```python
->>> om.version()
-{'program_version': 'schema-50.0', 'schema_version': 50}
-```
-
-Equivalent to the CLI's `openMalaria --version`.
-
-## IMPORTATNT: one subprocess per run()
-
-OpenMalaria's C++ core keeps several pieces of state as process-global statics
-that `init()` functions populate but never clear. This works for the CLI (always
-exactly one process per scenario), but not for a library function callers might
-invoke repeatedly in one long-lived process. Verified examples:
-
-- `util::CommandLine::resourcePath` -- a 2nd call with `resource_path` set
-  throws outright ("--resource-path (or -p) may only be given once").
-- `util::CommandLine::options` -- boolean CLI flags (`verbose`, `progress`, ...)
-  leak silently across calls; once set, stuck on for the rest of the process.
-- `interventions::InterventionManager` -- append-only; throws on a 2nd run
-  reusing any `<component id="...">` name, and silently duplicates/accumulates
-  timed and continuous deployments otherwise.
-- `Transmission::PerHostAnophParams::params` -- append-only per mosquito
-  species; a 2nd run's species indices land on the *first* run's leftover
-  entries, silently using the wrong entomological parameters.
-- `mon::Continuous::toReport` -- append-only; a 2nd run's `continuous` DataFrame
-  would include the first run's columns mixed into its own.
-- `mon::internal::runtime.conditions` -- push_back-only, never cleared.
-
-It would be ideal to fix the underyling issues with OpenMalaria, but I am not an
-admin there. So instead, a work around is to launch
-`python -m openmalaria._worker` fresh for every call, so there's never a second
-call in the same still-alive process for any of the above to leak across.
-
-It costs a process-spawn + reimport per `run()` call
+`ScenarioResult` (an `OMRunResult` with a `name`) is also available for callers
+batching many runs.
 
 ## Parallelism (mpi4py)
 
 `run()`'s own subprocess isolation makes it safe to call repeatedly in one
 process, but that's still one scenario at a time. For genuine parallelism across
-scenarios (especially across nodes on a cluster), distribute with mpi4py:
+scenarios (especially across nodes on a cluster), distribute with mpi4py
+(`pip install "openmalaria-tools[mpi]"`):
 
 ```python
 from mpi4py import MPI
@@ -141,21 +95,13 @@ result = om.run(path=scenario_paths[comm.rank])
 
 Pin ranks to individual cores via your launcher, e.g.
 `mpirun --bind-to core -np N python script.py`. Note each rank's `run()` call
-still spawns its own worker subprocess underneath
+still spawns its own worker subprocess underneath.
 
-## Tests
+## Development
 
 ```sh
-uv run --extra test pytest
+uv run pytest
+uv run ruff format --check
+uv run ruff check
+uv run basedpyright
 ```
-
-## Limitations
-
-**No checkpoint/resume support.** Checkpointing (`-c`/`--checkpoint-file` on the
-CLI) remains a CLI-only feature; `om.run()` exposes no checkpoint parameters.
-
-**CPU-core pinning is the caller's responsibility.** OpenMalaria's simulation
-engine has no internal threading (no OpenMP, no `std::thread` anywhere in the
-C++ core), so single-core execution is achieved externally:
-`mpirun --bind-to core -np N python script.py`, or
-`os.sched_setaffinity(0, {core_id})` (Linux) at the start of a worker process.
